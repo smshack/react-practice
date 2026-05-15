@@ -4,18 +4,25 @@ import {
   Route,
 } from "react-router-dom"
 
-import DashboardPage from "@/pages/dashboard/DashboardPage"
+import { menuItems } from "@/router/menu"
 
 export default function Router() {
 
   return (
     <BrowserRouter>
+
       <Routes>
-        <Route
-          path="/"
-          element={<DashboardPage />}
-        />
+
+        {menuItems.map((menu) => (
+          <Route
+            key={menu.path}
+            path={menu.path}
+            element={menu.element}
+          />
+        ))}
+
       </Routes>
+
     </BrowserRouter>
   )
 }
