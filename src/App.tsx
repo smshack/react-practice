@@ -1,13 +1,7 @@
-import { Button } from "@/components/ui/button"
+import Router from "@/router"
 
 function App() {
-  return (
-    <div className="h-screen flex items-center justify-center">
-      <Button>
-        로그인
-      </Button>
-    </div>
-  )
+  return <Router />
 }
 
 export default App
