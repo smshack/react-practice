@@ -9,4 +9,7 @@
 export const ENV = {
   /** Keycloak 인증 서버의 기본 URL */
   KEYCLOAK_URL: import.meta.env.VITE_KEYCLOAK_URL,
+  API_URL: import.meta.env.VITE_API_URL,
+  KEYCLOAK_REALM: import.meta.env.VITE_KEYCLOAK_REALM,
+  KEYCLOAK_CLIENT_ID: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
 }
