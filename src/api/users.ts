@@ -1,15 +1,5 @@
 import { get } from "@/api/client"
-
-/** * 사용자 정보를 나타내는 인터페이스 
- */
-export interface User {
-  /** 사용자의 고유 식별자 (ID) */
-  id: number
-  /** 사용자의 실명 또는 닉네임 */
-  name: string
-  /** 사용자의 이메일 주소 */
-  email: string
-}
+import { type User } from "@/types/user"
 
 /**
  * 서버에 저장된 전체 사용자 목록을 조회합니다.

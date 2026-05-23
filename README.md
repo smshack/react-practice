@@ -111,3 +111,131 @@ npm run build
 
 ```
 
+## 로컬 스토리지 기반 인증 아키텍처 흐름
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 사용자
+    participant Login as LoginPage<br>(React)
+    participant Storage as 로컬 스토리지<br>(Browser)
+    participant Redux as authSlice<br>(Redux Store)
+    participant Guard as ProtectedRoute<br>(Router)
+    participant Dash as DashboardPage<br>(React)
+    participant API as NestJS 백엔드
+
+    %% 1단계: 로그인 및 상태 적재
+    User->>Login: ID / PW 입력 후 로그인 버튼 클릭
+    Login->>API: POST /auth/login (인증 요청)
+    API-->>Login: { accessToken, refreshToken } 반환
+    Login->>Storage: setToken(accessToken) 저장
+    Login->>API: GET /users/me (내 정보 요청)
+    API-->>Login: { success: true, user: { username, role } } 반환
+    Login->>Redux: dispatch(setUser(user)) <br>※ [isLogin: true] 변경
+    Login->>Guard: navigate("/dashboard") 이동 시도
+
+    %% 2단계: 라우터 가드 검증
+    Note over Guard: [인증 검증]<br>isLogin(true) && getToken() 존재 여부 체크
+    Guard->>Dash: 검증 통과! 대시보드 화면 렌더링 허용
+    Dash-->>User: "Welcome back, Admin!" 대시보드 표출
+```
+### 1. 컴포넌트별 역할 및 데이터 흐름 요약
+
+| 파일명 / 컴포넌트 | 핵심 역할 (Responsibility) | 다루는 데이터 및 상태 | 인증 통과 조건 / 액션 결과 |
+| :--- | :--- | :--- | :--- |
+| **`LoginPage.tsx`** | 사용자의 로그인 인증을 처리하고 초기 전역 상태를 빌드하는 진입점 | `username`, `password` (Local State) | 로그인 성공 시 Access Token을 스토리지에 기록하고, `setUser` 액션을 디스패치하여 후속 가드를 활성화함. |
+| **`Router.tsx`** | URL 경로에 따라 전체 화면을 분기하고 첫 진입 시 리다이렉트 흐름 통제 | `isLogin` (Redux), `getToken()` (Storage) | 현재 인증 상태에 따라 루트(` / `) 진입 시 `/dashboard` 또는 `/login`으로 자동 포워딩함. |
+| **`ProtectedRoute.tsx`** | 인가되지 않은 비로그인 유저의 대시보드 내부 진입을 차단하는 보안 성벽 | `isLogin` (Redux), `getToken()` (Storage) | `isLogin`이 `true`이고 스토리지에 토큰이 동시에 존재해야 내부 화면(`<Outlet />`) 렌더링을 허용함. |
+| **`authSlice.ts`** | React 앱 전역에서 유지할 로그인 유저의 인적 정보 및 상태 메모리 저장소 | `user` (인적 정보 객체), `isLogin` (boolean) | `setUser()` 호출 시 글로벌 로그인 세션 활성화, `logout()` 호출 시 전역 인증 데이터를 초기화함. |
+| **`Sidebar.tsx`** | 좌측 메뉴 네비게이션 렌더링 및 하단 유저 프로필/로그아웃 제어 | `currentUser` (Redux), `isLogin` (Redux) | 로그아웃 클릭 시 `logout()` 액션을 실행하고, 로컬 스토리지 내 토큰 찌꺼기를 완전 삭제(`removeToken`)함. |
+
+---
+
+### 2. 로그인 및 인증 가드 구동 파이프라인
+
+1. **인증 요청 및 토큰 적재**: 
+   사용자가 `LoginPage`에서 계정 정보를 입력하면 백엔드 API를 통해 `accessToken`을 발급받아 로컬 스토리지에 저장(`setToken`)합니다.
+2. **유저 정보 동기화**: 
+   로그인 직후 백엔드의 내 정보 API(`getMe`)를 조회하여, 수신한 유저 객체를 Redux 스토어(`authSlice`)에 `setUser` 액션으로 주입합니다. 이 단계에서 `isLogin` 상태가 `true`로 전환됩니다.
+3. **라우터 가드(Gatekeeping) 통과**: 
+   `Maps("/dashboard")` 호출 시 `ProtectedRoute`가 Redux의 `isLogin`과 스토리지를 검사합니다. 두 보안 조건이 모두 만족되면 대시보드 및 내부 관리 패널의 문이 열립니다.
+
+## 인증 관련 흐름 정리
+- 인증 유스케이스
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as React Client (Axios)
+    participant Interceptor as Axios Interceptor
+    participant Server as NestJS Server
+    participant DB as PostgreSQL DB
+
+    %% 1. 회원가입 및 로그인 단계
+    Note over Client, DB: [ 1단계: 초기 인증 및 토큰 발급 ]
+    Client->>Server: 1. 회원가입 요청 (POST /users)
+    Server->>Server: 비밀번호 Bcrypt 암호화
+    Server->>DB: 유저 정보 저장
+    Server-->>Client: 회원가입 완료 (비밀번호 제외)
+
+    Client->>Server: 2. 로그인 요청 (POST /auth/login)
+    Server->>DB: 유저네임 조회 및 비밀번호 bcrypt 검증
+    Server->>Server: Access & Refresh Token 서명 (JWT)
+    Server->>Server: Refresh Token 다시 Bcrypt 암호화
+    Server->>DB: 암호화된 Refresh Token 저장
+    Server-->>Client: 토큰 쌍 반환 (Access, Refresh Token)
+    Client->>Client: 로컬 스토리지 및 Redux에 토큰 저장
+
+    %% 2. 일반적인 API 요청 단계
+    Note over Client, DB: [ 2단계: 정상적인 API 인가 흐름 ]
+    Client->>Interceptor: 3. 내 정보 조회 요청 (GET /users/me)
+    Interceptor->>Interceptor: Headers에 Bearer AccessToken 자동 주입
+    Interceptor->>Server: API 요청 전달
+    Server->>Server: JwtAuthGuard가 Access Token 위변조 검증
+    Server-->>Client: 200 OK (성공 응답 및 유저 데이터)
+
+    %% 3. 토큰 만료 및 Interceptor 자동 재발급 단계
+    Note over Client, DB: [ 3단계: Access Token 만료 및 자동 갱신 ]
+    Client->>Interceptor: 4. 보호된 API 요청 (Access Token 만료 상태)
+    Interceptor->>Server: API 요청 전송 (Expired Token)
+    Server->>Server: JwtAuthGuard 검증 실패 (만료됨)
+    Server-->>Interceptor: 401 Unauthorized 에러 반환
+
+    Note over Interceptor: Interceptor가 401 에러 감지 후<br/>기존 요청 일시 대기(Queueing)
+    Interceptor->>Server: 5. 토큰 재발급 요청 (POST /auth/refresh) with RefreshToken
+    Server->>Server: Refresh Token 위변조 및 만료 기간 검증
+    Server-->>Interceptor: 6. 새로운 Access Token 반환
+    Interceptor->>Interceptor: 로컬 스토리지의 Access Token 갱신
+
+    Interceptor->>Server: 7. [대기했던 원래 API 재요청] 새 AccessToken 주입
+    Server->>Server: 새 토큰 검증 완료
+    Server-->>Client: 최종 결과 성공 반환 (사용자는 끊김을 느끼지 못함)
+```
+- 인증 시퀀스 다이어그램
+```mermaid
+graph TD
+    %% Actor 정의
+    User([사용자: React Client])
+
+    %% NestJS 시스템 경계 서브그래프
+    subgraph NestJS_Auth_System [NestJS Auth System]
+        UC_Register[회원가입 <br> POST /users]
+        UC_Login[로그인 <br> POST /auth/login]
+        UC_GetMe[내 정보 조회 <br> GET /users/me]
+        UC_Refresh[토큰 재발급 <br> POST /auth/refresh]
+        UC_Hash[비밀번호 및 토큰 해싱 <br> Bcrypt]
+    end
+
+    %% 사용자 액션 연결
+    User --> UC_Register
+    User --> UC_Login
+    User --> UC_GetMe
+    User --> UC_Refresh
+
+    %% 내부 포함 관계 표현 (include 대신 점선 화살표 처리)
+    UC_Register -.->|include| UC_Hash
+    UC_Login -.->|include| UC_Hash
+
+    %% 스타일링
+    style User fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style NestJS_Auth_System fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style UC_Hash fill:#fff9c4,stroke:#fbc02d,stroke-width:1px
+```
