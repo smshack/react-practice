@@ -211,31 +211,44 @@ sequenceDiagram
 ```
 - 인증 시퀀스 다이어그램
 ```mermaid
-graph TD
-    %% Actor 정의
-    User([사용자: React Client])
+flowchart TD
+    %% 스타일 정의
+    classDef react fill:#61DAFB,stroke:#333,stroke-width:2px,color:#000;
+    classDef nest fill:#E0234E,stroke:#333,stroke-width:2px,color:#fff;
+    classDef db fill:#336791,stroke:#333,stroke-width:2px,color:#fff;
+    classDef storage fill:#F1F1F1,stroke:#333,stroke-width:2px,color:#000;
 
-    %% NestJS 시스템 경계 서브그래프
-    subgraph NestJS_Auth_System [NestJS Auth System]
-        UC_Register[회원가입 <br> POST /users]
-        UC_Login[로그인 <br> POST /auth/login]
-        UC_GetMe[내 정보 조회 <br> GET /users/me]
-        UC_Refresh[토큰 재발급 <br> POST /auth/refresh]
-        UC_Hash[비밀번호 및 토큰 해싱 <br> Bcrypt]
+    %% 노드 정의
+    subgraph Frontend [React 프로젝트]
+        A[React App] --> B[로그인 페이지]
+        B -->|"[axios.post] /auth/login"| C[Axios Login 요청]
+        H[Axios Interceptor] -->|"Authorization 헤더 자동 추가"| I[보호 API 요청]
     end
 
-    %% 사용자 액션 연결
-    User --> UC_Register
-    User --> UC_Login
-    User --> UC_GetMe
-    User --> UC_Refresh
+    subgraph BrowserStorage [브라우저 저장소]
+        F[(LocalStorage)]
+    end
 
-    %% 내부 포함 관계 표현 (include 대신 점선 화살표 처리)
-    UC_Register -.->|include| UC_Hash
-    UC_Login -.->|include| UC_Hash
+    subgraph Backend [NestJS 백엔드]
+        D["/auth/login 컨트롤러"] --> E["JWT Access & Refresh 토큰 생성"]
+        J[Nest JwtStrategy] -->|"토큰 검증 및 인가"| K[보호 API 컨트롤러]
+    end
 
-    %% 스타일링
-    style User fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    style NestJS_Auth_System fill:#f9f9f9,stroke:#333,stroke-width:1px
-    style UC_Hash fill:#fff9c4,stroke:#fbc02d,stroke-width:1px
+    subgraph Database [데이터베이스]
+        L[(PostgreSQL)]
+    end
+
+    %% 흐름 연결
+    C --> D
+    E -->|"Response Body 반환"| G[React에서 응답 수신]
+    G -->|setToken| F
+    F -->|getToken| H
+    I --> J
+    K -->|Query 실행| L
+
+    %% 클래스 바인딩
+    class A,B,C,G,H,I react;
+    class D,E,J,K nest;
+    class F storage;
+    class L db;
 ```

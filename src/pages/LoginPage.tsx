@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useAppDispatch } from "@/store/hooks" // 💡 Redux 디스패치를 위해 추가
-import { setUser } from "@/store/slices/authSlice" // 💡 전역 상태 주입을 위해 추가
-import { login, getMe } from "@/api/auth" // 💡 내 정보 조회 API 포함
+import { useAppDispatch } from "@/store/hooks" 
+import { setUser } from "@/store/slices/authSlice" 
+import { login, getMe } from "@/api/auth" 
 import { setToken } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,11 +23,12 @@ export default function LoginPage() {
 
     setIsLoading(true)
     try {
-      // 1. BFF 로그인 API 호출 (Refresh Token은 백엔드가 쿠키로 자동 처리)
+      // 1. BFF 로그인 API 호출
       const loginResponse = await login({ username, password })
       
-      // Axios가 감싸고 있는 데이터 구조 대응 안전 장치
-      const accessToken = loginResponse?.data?.accessToken || loginResponse?.accessToken
+      // 💡 [수정 포인트] loginResponse의 타입 구조에 맞춰 데이터 접근 방식을 단순화합니다.
+      // API 호출 함수에서 이미 response.data를 풀어서 줬거나 인터페이스가 그렇게 잡혀있다면 바로 추출합니다.
+      const accessToken = loginResponse?.accessToken
 
       if (!accessToken) {
         throw new Error("응답에 Access Token이 없습니다.")
@@ -36,14 +37,14 @@ export default function LoginPage() {
       // 2. 프론트엔드 인증 가드용 Access Token 적재
       setToken(accessToken)
 
-      // 3. 💡 핵심 보완: 새 토큰을 기반으로 백엔드에 내 정보(User) 조회 요청
+      // 3. 새 토큰을 기반으로 백엔드에 내 정보(User) 조회 요청
       const meResponse = await getMe()
       
       if (meResponse && meResponse.success) {
-        // 4. 💡 Redux 전역 상태에 유저 정보 세팅 (isLogin을 true로 켬)
+        // 4. Redux 전역 상태에 유저 정보 세팅 (isLogin을 true로 켬)
         dispatch(setUser(meResponse.user))
         
-        // 5. 💡 모든 가드가 완벽히 통과되었으므로 대시보드로 안전하게 이동!
+        // 5. 모든 가드가 완벽히 통과되었으므로 대시보드로 안전하게 이동!
         navigate("/dashboard")
       } else {
         throw new Error("유저 정보를 불러오지 못했습니다.")
